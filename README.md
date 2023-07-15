@@ -44,7 +44,7 @@ TODO: # Add instructions for using the chatbot to optimize the model.
 
 ## Contributing
 
-We welcome contributions from the community. If you find any issues or have suggestions for improvements, please open an issue or submit a pull request.
+TODO
 
 ## License
 
