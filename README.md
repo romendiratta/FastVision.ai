@@ -48,7 +48,7 @@ We welcome contributions from the community. If you find any issues or have sugg
 
 ## License
 
-MIT License (Replace this with the actual license your project uses)
+TODO
 
 ## Contact
 
