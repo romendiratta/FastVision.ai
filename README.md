@@ -10,12 +10,18 @@ Based on reviewing recent literature, it seems that there are some ML modeling s
 
 - EDA
   - Lung_segmentation_demo
+    - *This python notebook contains a demonstration of how the UNet works to capture just the lung segments from the rest of the background including removal of any text in the boundaries*
 - Modeling
   - EDA_and_Baseline_Model (CNN with ResNet50, ImageNet transfer learning)
+    - *This notebook is our Baseline Model. Accuracy is high, but precision and recall is low due to imbalance*
   - Lung Segmentation Pipeline Model
+    - *This notebook contains the "data alignment pipeline" that uses UNet to pick out the correct lung segment from various datasets"*
   - 3D CNN (Draft)
+    - *This notebook contains the code progress of the 3D CNN which has promise to increase the precision and recall scores. But we are working on some bugs*
   - Sagemaker Scaffolding Code
+    - *This contains code to wrap up the final notebooks and use it in a secure infrastructure, in a way that customers will use*
 - Streamlit
+    - *These files contain the code for the Streamlit based UI*
   - App.py
   - requirements.txt
   - run-local.sh
