@@ -3,34 +3,74 @@ import json
 import logging
 import os
 import sys
+import math
 
 import torch
+import torch.nn as nn
 import torch.distributed as dist
 import torch.nn.functional as F
 import torch.optim as optim
 import torch.utils.data
 import torch.utils.data.distributed
-from torchvision import datasets, transforms
+import SimpleITK as sitk
+import pandas as pd
 
-from Ensemble import Ensemble
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
 logger.addHandler(logging.StreamHandler(sys.stdout))
 
 
+class ThreeDimCNN(nn.Module):
+    def __init__(self):
+        super(ThreeDimCNN, self).__init__()
+
+        self.conv1 = nn.Conv3d(1, 32, kernel_size=3, stride=1, padding=1)
+        self.conv2 = nn.Conv3d(32, 64, kernel_size=3, stride=1, padding=1)
+        self.conv3 = nn.Conv3d(64, 128, kernel_size=3, stride=1, padding=1)
+        self.conv4 = nn.Conv3d(128, 256, kernel_size=3, stride=1, padding=1)
+
+        self.pool = nn.MaxPool3d(kernel_size=2, stride=2)
+
+        self.dropout = nn.Dropout(p=0.2)
+
+        self.fc = nn.Linear(256 * 8 * 8 * 8, 1)
+
+        self.relu = nn.ReLU()
+        self.sigmoid = nn.Sigmoid()
+
+    def forward(self, x):
+        x = self.relu(self.conv1(x))
+        x = self.pool(x)
+
+        x = self.relu(self.conv2(x))
+        x = self.pool(x)
+
+        x = self.relu(self.conv3(x))
+        x = self.pool(x)
+
+        x = self.relu(self.conv4(x))
+        x = self.pool(x)
+
+        x = x.view(-1, 256 * 8 * 8 * 8)
+        x = self.dropout(x)
+        x = self.fc(x)
+        x = self.sigmoid(x)
+
+        return x
+
+
 class CTDataset(torch.utils.data.IterableDataset):
-    def __init__(self, metadata_file_path, base_file_path, subfolder):
+    def __init__(self, metadata, base_file_path, subfolder):
         super(CTDataset).__init__()
         self.metadata = metadata
         self.start = 0
         self.end = self.__len__()
         self.base_file_path = base_file_path
-        self.subfolder = subfolder
-        
+
     def __len__(self):
         return len(self.metadata.index)
-    
+
     def __iter__(self):
         worker_info = torch.utils.data.get_worker_info()
         if worker_info is None:  # single-process data loading, return the full iterator
@@ -48,7 +88,7 @@ class CTDataset(torch.utils.data.IterableDataset):
             sample_metadata = self.metadata.iloc[idx]
             # Load the actual data sample (CT scan) based on the file name
             file_name = sample_metadata['seriesuid']
-            file_path = os.path.join(self.base_file_path, self.subfolder, file_name)
+            file_path = os.path.join(self.base_file_path, file_name + ".mhd")
             ct_scan = sitk.ReadImage(file_path)
             # Convert the SimpleITK image to a numpy array
             ct_scan = sitk.GetArrayFromImage(ct_scan)
@@ -58,9 +98,9 @@ class CTDataset(torch.utils.data.IterableDataset):
 
 
 # TODO: Implement function to build a torch data loader. 
-def _get_train_data_loader(metadata, base_file_path, subfolder, batch_size, is_distributed, **kwargs):
+def _get_train_data_loader(metadata, base_file_path, batch_size, is_distributed, **kwargs):
     logger.info("Get train data loader.")
-    dataset = CTDataset(metadata, base_file_path, subfolder)
+    dataset = CTDataset(metadata, base_file_path)
     train_sampler = (
         torch.utils.data.distributed.DistributedSampler(dataset) if is_distributed else None
     )
@@ -72,13 +112,13 @@ def _get_train_data_loader(metadata, base_file_path, subfolder, batch_size, is_d
         **kwargs
     )
 
-# TODO: Implement function to get test data loader. 
-def _get_test_data_loader(metadata, base_file_path, subfolder, test_batch_size, training_dir, **kwargs):
+
+def _get_test_data_loader(metadata, base_file_path, test_batch_size, training_dir, **kwargs):
     logger.info("Get test data loader.")
-    dataset = CTDataset(metadata, base_file_path, subfolder)
+    dataset = CTDataset(metadata, base_file_path)
 
     return torch.utils.data.DataLoader(
-        dataset
+        dataset,
         batch_size=test_batch_size,
         shuffle=True,
         **kwargs
@@ -119,12 +159,11 @@ def train(args):
     torch.manual_seed(args.seed)
     if use_cuda:
         torch.cuda.manual_seed(args.seed)
-        
+
     metadata = pd.read(os.path.join(args.data_dir, "metadata.csv"))
-    SEGMENTED_VERSION = "LUNA16_segmented_2mm"
-    train_loader = _get_train_data_loader(metadata, args.data_dir, SEGMENTED_VERSION, 
-                                          args.batch_size, args.data_dir, is_distributed, **kwargs)
-    
+    train_loader = _get_train_data_loader(metadata, args.data_dir,
+                                          args.batch_size, is_distributed, **kwargs)
+
     # test_loader = _get_test_data_loader(args.test_batch_size, args.data_dir, **kwargs)
 
     logger.debug(
@@ -135,15 +174,15 @@ def train(args):
         )
     )
 
-    logger.debug(
-        "Processes {}/{} ({:.0f}%) of test data".format(
-            len(test_loader.sampler),
-            len(test_loader.dataset),
-            100.0 * len(test_loader.sampler) / len(test_loader.dataset),
-        )
-    )
+    # logger.debug(
+    #     "Processes {}/{} ({:.0f}%) of test data".format(
+    #         len(test_loader.sampler),
+    #         len(test_loader.dataset),
+    #         100.0 * len(test_loader.sampler) / len(test_loader.dataset),
+    #     )
+    # )
 
-    model = Ensemble().to(device)
+    model = ThreeDimCNN().to(device)
     if is_distributed and use_cuda:
         # multi-machine multi-gpu case
         model = torch.nn.parallel.DistributedDataParallel(model)
@@ -160,7 +199,7 @@ def train(args):
             optimizer.zero_grad()
             output = model(data)
             # TODO: Select correct test loss.
-            loss = nn.BCELoss((output, target)
+            loss = nn.BCELoss(output, target)
             loss.backward()
             if is_distributed and not use_cuda:
                 # average gradients manually for multi-machine cpu case only
