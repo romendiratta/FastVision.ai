@@ -19,14 +19,48 @@ logger.setLevel(logging.INFO)
 logger.addHandler(logging.StreamHandler(sys.stdout))
 
 
+class CTDataset(torch.utils.data.IterableDataset):
+    def __init__(self, metadata_file_path, base_file_path, subfolder):
+        super(CTDataset).__init__()
+        self.metadata = metadata
+        self.start = 0
+        self.end = self.__len__()
+        self.base_file_path = base_file_path
+        self.subfolder = subfolder
+        
+    def __len__(self):
+        return len(self.metadata.index)
+    
+    def __iter__(self):
+        worker_info = torch.utils.data.get_worker_info()
+        if worker_info is None:  # single-process data loading, return the full iterator
+            iter_start = self.start
+            iter_end = self.end
+        else:  # in a worker process
+            # split workload
+            per_worker = int(math.ceil((self.end - self.start) / float(worker_info.num_workers)))
+            worker_id = worker_info.id
+            iter_start = self.start + worker_id * per_worker
+            iter_end = min(iter_start + per_worker, self.end)
+        # Load data for the current worker's portion
+        for idx in range(iter_start, iter_end):
+            # Get the data sample's metadata (e.g., file name, label)
+            sample_metadata = self.metadata.iloc[idx]
+            # Load the actual data sample (CT scan) based on the file name
+            file_name = sample_metadata['seriesuid']
+            file_path = os.path.join(self.base_file_path, self.subfolder, file_name)
+            ct_scan = sitk.ReadImage(file_path)
+            # Convert the SimpleITK image to a numpy array
+            ct_scan = sitk.GetArrayFromImage(ct_scan)
+            label = sample_metadata['class']  # Get the label from the metadata
+            # Yield the data sample (CT scan and label) to the DataLoader
+            yield ct_scan, label
+
+
 # TODO: Implement function to build a torch data loader. 
-def _get_train_data_loader(batch_size, training_dir, is_distributed, **kwargs):
+def _get_train_data_loader(metadata, base_file_path, subfolder, batch_size, is_distributed, **kwargs):
     logger.info("Get train data loader.")
-    dataset = datasets.(
-        transform=transforms.Compose(
-            [transforms.ToTensor()]
-        ),
-    )
+    dataset = CTDataset(metadata, base_file_path, subfolder)
     train_sampler = (
         torch.utils.data.distributed.DistributedSampler(dataset) if is_distributed else None
     )
@@ -39,13 +73,10 @@ def _get_train_data_loader(batch_size, training_dir, is_distributed, **kwargs):
     )
 
 # TODO: Implement function to get test data loader. 
-def _get_test_data_loader(test_batch_size, training_dir, **kwargs):
+def _get_test_data_loader(metadata, base_file_path, subfolder, test_batch_size, training_dir, **kwargs):
     logger.info("Get test data loader.")
-    dataset = datasets.(
-        transform=transforms.Compose(
-            [transforms.ToTensor()]
-        ),
-    )
+    dataset = CTDataset(metadata, base_file_path, subfolder)
+
     return torch.utils.data.DataLoader(
         dataset
         batch_size=test_batch_size,
@@ -88,9 +119,13 @@ def train(args):
     torch.manual_seed(args.seed)
     if use_cuda:
         torch.cuda.manual_seed(args.seed)
-
-    train_loader = _get_train_data_loader(args.batch_size, args.data_dir, is_distributed, **kwargs)
-    test_loader = _get_test_data_loader(args.test_batch_size, args.data_dir, **kwargs)
+        
+    metadata = pd.read(os.path.join(args.data_dir, "metadata.csv"))
+    SEGMENTED_VERSION = "LUNA16_segmented_2mm"
+    train_loader = _get_train_data_loader(metadata, args.data_dir, SEGMENTED_VERSION, 
+                                          args.batch_size, args.data_dir, is_distributed, **kwargs)
+    
+    # test_loader = _get_test_data_loader(args.test_batch_size, args.data_dir, **kwargs)
 
     logger.debug(
         "Processes {}/{} ({:.0f}%) of train data".format(
@@ -125,7 +160,7 @@ def train(args):
             optimizer.zero_grad()
             output = model(data)
             # TODO: Select correct test loss.
-            loss = F.nll_loss(output, target)
+            loss = nn.BCELoss((output, target)
             loss.backward()
             if is_distributed and not use_cuda:
                 # average gradients manually for multi-machine cpu case only
@@ -141,7 +176,7 @@ def train(args):
                         loss.item(),
                     )
                 )
-        test(model, test_loader, device)
+        # test(model, test_loader, device)
     save_model(model, args.model_dir)
 
 
