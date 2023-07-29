@@ -1,5 +1,5 @@
 # Use an official Python runtime as a parent image
-FROM python:3.9
+FROM python:3.10
 
 # Set the working directory in the container to /app
 WORKDIR /app
@@ -17,6 +17,8 @@ RUN apt-get install -y --fix-missing \
 COPY . .
 
 # Install dependencies
+#RUN pip install --no-cache-dir -r requirements.txt
+#RUN pip install -r requirements.txt
 RUN pip install --no-cache-dir -r requirements.txt
 
 # Make port 8501 available to the world outside this container
