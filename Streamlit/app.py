@@ -20,6 +20,7 @@ import glob
 import boto3
 import SimpleITK as sitk
 import torch
+from model.Model import Model
 
 # Local Modules
 from lungmask import LMInferer
@@ -27,8 +28,6 @@ from lungmask import LMInferer
 
 import torch
 # torch.cuda.empty_cache()
-
-
 
 ##########################################################################################
 ##########################################################################################
@@ -281,8 +280,15 @@ def segment_single_scan(mhd_file_path, raw_file_path, output_file_path, voxel_si
 
         print('done')
 
-
-
+def predict(input_):
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    model = torch.nn.DataParallel(Model())
+    with open(os.path.join("model", "model.pth"), "rb") as f:
+        model.load_state_dict(torch.load(f))
+    model.to(device)
+    input_ = np.expand_dims(input_, 0)
+    with torch.no_grad():
+        return model(torch.unsqueeze(torch.from_numpy(input_).to(device), 0))[0][0]
 
 
 
@@ -308,29 +314,23 @@ def mhd_to_image(mhd_file):
 
 st.title("Lung Segmentation")
 
-# mhd_file = st.file_uploader("Please upload a .mhd file", type=["mhd"])
-# raw_file = st.file_uploader("Please upload a .raw file", type=["raw"])
-
-
-# np_image = mhd_to_image('Radiogenomics/user_output_test/test_2mm_segmented.mhd')
-
-# # Display the image slice
-# plt.imshow(np_image[128], cmap='gray')
-# st.pyplot(plt)
-
-
 
 mhd_file = st.file_uploader("Please upload a .mhd file", type=["mhd"])
 raw_file = st.file_uploader("Please upload a .raw file", type=["raw"])
 
-
 # After both files have been uploaded, read and process them
 if mhd_file and raw_file:
     # Put a delay for 2 seconds
-    time.sleep(2)
+    time.sleep(1)
+    with open(os.path.join("tmp", mhd_file.name), 'bw+') as f:
+        f.write(mhd_file.getvalue())
+    with open(os.path.join("tmp", raw_file.name), 'bw+') as f:
+        f.write(raw_file.getvalue())
 
-    np_image = mhd_to_image('Radiogenomics/user_output_test/test_2mm_segmented.mhd')
-
+    np_image = mhd_to_image(os.path.join("tmp", mhd_file.name))
+    prediction = predict(np_image)
+    
     # Display the image slice
     plt.imshow(np_image[128], cmap='gray')
     st.pyplot(plt)
+    st.success(f'Model prediction: {prediction} confidence')
