@@ -304,7 +304,7 @@ import SimpleITK as sitk
 import numpy as np
 
 # Set the STREAMLIT_CONFIG_FILE env variable
-os.environ["STREAMLIT_CONFIG_FILE"] = "streamlit_theme_config.toml"
+os.environ["STREAMLIT_CONFIG_FILE"] = "./streamlit_theme_config.toml"
 
 
 def mhd_to_image(mhd_file):
@@ -318,16 +318,27 @@ def mhd_to_image(mhd_file):
 
 # Layout for logo and title
 col1, col2 = st.columns([1, 6])  # Adjust the ratio if needed
-
 # Display the logo in the left column
 col1.image("fastvision_logo.png", width=250)  # Adjust width as necessary
-# st.markdown('<hr style="color:#2074cc; background-color:#2074cc; height:1px; border:none;"/>', unsafe_allow_html=True)
 
-# Display the title in the right column
-# col2.title("FastVision.ai")
+# Add the introductory content
+introduction = """
+Welcome to FastVision.ai Lung Cancer Prediction Tool. This tool is powered by a machine learning model that has been trained on [LIDC Data](https://wiki.cancerimagingarchive.net/pages/viewpage.action?pageId=1966254). 
+Please follow "Required Steps" below to get your prediction. The image below shows some prior examples of samples predicted by the Fastvision.ai model.
+"""
+st.write(introduction)
 
-# Create columns for file uploaders
-col_file1, col_file2 = st.columns(2)
+# Display the representative image
+st.image("good_lungs_bad_lungs.png")
+
+# Display the steps
+steps = """
+### Required Steps:
+1. Please upload your .mhd and .raw files in the boxes below and hit predict.
+2. Once you receive a prediction, please confirm or reject.
+3. Add a note.
+"""
+st.write(steps)
 
 # Place the file uploaders in their respective columns
 # Create columns for file uploaders and spacing
@@ -370,8 +381,8 @@ if mhd_file and raw_file:
     feedback_prompt = st.markdown("""How did our model perform compared to your prediction?""")
 
     # Buttons using Streamlit's native method (hidden visually but detectable programmatically)
-    good_pred = st.button("👍")
-    bad_pred = st.button("👎")
+    good_pred = st.button("👍 The model performed well!")
+    bad_pred = st.button("👎 The model needs som work.")
 
 
     # Check if either button is clicked

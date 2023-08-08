@@ -128,7 +128,6 @@ def remove_blank_slices(segmented_ct_scan,ct_scan=None):
     else:
         return segment_result
 
-
 def process_dicom_folder(dicom_dir):
     # Check if the directory contains .dcm files
     dicom_files = [file for file in os.listdir(dicom_dir) if file.endswith(".dcm")]
@@ -196,42 +195,51 @@ def check_dicom_folder(dicom_dir):
 
     return ct_scan
 
-
-
 # Define a function to convert PIL Image to SimpleITK Image
 def pil_to_sitk(pil_image):
     np_array = np.array(pil_image)
     sitk_image = sitk.GetImageFromArray(np_array)
     return sitk_image
 
-def segment_single_scan(mhd_file_path, raw_file_path, output_file_path, voxel_size=2):
-    # Initialize lungmask inferer
+
+def segment_single_scan(root_dir,output_file_path,mhd_file_name,voxel_size=2):
+    #Initialize lungmask inferer
     inferer = LMInferer()
 
-    cube_length = 512 / voxel_size
+    # Get a list of all files in the root directory
+    all_files = os.listdir(root_dir)
 
-    # Check if the input file is a DICOM file
-    if mhd_file_path.endswith(".dcm"):
-        print("Segmenting .dcm file...")
-        mhd_file, origin, spacing = process_dicom_file(mhd_file_path, raw_file_path)
-        image_sitk = sitk.GetImageFromArray(mhd_file)
-        mhd_file_name = os.path.splitext(os.path.basename(mhd_file_path))[0]
-        sitk.WriteImage(image_sitk, os.path.join(output_file_path, mhd_file_name + '.mhd'))
-        volume = sitk.ReadImage(os.path.join(output_file_path, mhd_file_name + '.mhd')) # read and cast to float32
-        volume = sitk.Cast(volume, sitk.sitkInt16)
-        volume.SetSpacing(spacing)
-        volume.SetOrigin(origin)
-        sitk.WriteImage(volume, os.path.join(output_file_path, mhd_file_name + '.mhd'))
-        mhd_file_paths = [os.path.join(output_file_path, mhd_file_name + '.mhd')]
+    # Filter DICOM files
+    dicom_files = [filename for filename in all_files if filename.endswith(".dcm")]
 
-    # Check if the input file is an MHD file
-    elif mhd_file_path.endswith(".mhd"):
+    # Filter mhd files
+    mhd_files = [filename for filename in all_files if filename.endswith(".mhd")]
+
+    cube_length = 512/voxel_size
+
+    # Check if there are any DICOM files in the root_dir
+    if len(dicom_files) > 0 and len(dicom_files) == len(all_files):
+        print("Segmenting .dcm files...")
+        mhd_file = check_dicom_folder(root_dir)
+        if isinstance(mhd_file, np.ndarray):
+            mhd_file, origin, spacing = process_dicom_folder(root_dir)
+            image_sitk = sitk.GetImageFromArray(mhd_file)
+            sitk.WriteImage(image_sitk, output_file_path + '/'+ mhd_file_name +'.mhd')
+            volume = sitk.ReadImage( output_file_path +  '/'+ mhd_file_name+'.mhd') # read and cast to float32
+            volume = sitk.Cast(volume, sitk.sitkInt16)
+            volume.SetSpacing(spacing)
+            volume.SetOrigin(origin)
+            sitk.WriteImage(volume, output_file_path +'/'+ mhd_file_name +'.mhd')
+            # Use glob to retrieve a list of .mhd file paths within the input folder
+            mhd_file_paths = glob.glob(os.path.join(output_file_path, '*.mhd'))
+
+    elif len(mhd_files) > 0 and len(dicom_files)==0:
         print("Segmenting .mhd file...")
-        mhd_file_paths = [mhd_file_path]
+        mhd_file_paths = glob.glob(os.path.join(root_dir, '*.mhd'))
 
-    else:
-        print("Unsupported file type. Please upload a .dcm or .mhd file.")
-        return
+    elif len(mhd_files) > 0 and len(dicom_files) > 0:
+        print("Folder contains both .mhd and .dcm files. Please upload only one scan at a time.")
+        sys.exit()
 
     # Normalize voxel size for each file, segment lungs, and save as new file
     for file_path in mhd_file_paths:
@@ -280,6 +288,10 @@ def segment_single_scan(mhd_file_path, raw_file_path, output_file_path, voxel_si
 
         print('done')
 
+
+
+
+
 def predict(input_):
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     model = torch.nn.DataParallel(Model())
@@ -322,12 +334,13 @@ raw_file = st.file_uploader("Please upload a .raw file", type=["raw"])
 if mhd_file and raw_file:
     # Put a delay for 2 seconds
     time.sleep(1)
-    with open(os.path.join("tmp", mhd_file.name), 'bw+') as f:
-        f.write(mhd_file.getvalue())
-    with open(os.path.join("tmp", raw_file.name), 'bw+') as f:
-        f.write(raw_file.getvalue())
+    # with open(os.path.join("tmp", mhd_file.name), 'bw+') as f:
+    #     f.write(mhd_file.getvalue())
+    # with open(os.path.join("tmp", raw_file.name), 'bw+') as f:
+    #     f.write(raw_file.getvalue())
 
-    np_image = mhd_to_image(os.path.join("tmp", mhd_file.name))
+    # np_image = mhd_to_image(os.path.join("tmp", mhd_file.name))
+    np_image = mhd_to_image("3.000000-1.25MM CHEST BONE PLUS-58248.mhd")
     prediction = predict(np_image)
     
     # Display the image slice
