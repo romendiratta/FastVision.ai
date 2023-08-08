@@ -303,6 +303,10 @@ import os
 import SimpleITK as sitk
 import numpy as np
 
+# Set the STREAMLIT_CONFIG_FILE env variable
+os.environ["STREAMLIT_CONFIG_FILE"] = "streamlit_theme_config.toml"
+
+
 def mhd_to_image(mhd_file):
     # Use SimpleITK to read the mhd file
     sitk_image = sitk.ReadImage(mhd_file)
@@ -311,7 +315,6 @@ def mhd_to_image(mhd_file):
     np_image = sitk.GetArrayFromImage(sitk_image)
 
     return np_image
-
 
 # Layout for logo and title
 col1, col2 = st.columns([1, 6])  # Adjust the ratio if needed
