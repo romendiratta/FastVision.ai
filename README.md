@@ -27,38 +27,7 @@ Based on reviewing recent literature, it seems that there are some ML modeling s
   - run-local.sh
   - Dockerfile
 
-## How to Use FastVision.ai
 
-### 1. Clone the Repo
-git clone https://github.com/romendiratta/FastVision.ai.git
-cd FastVision.ai
-
-### 2. Install Dependencies
-TODO: Add installation instructions for any specific dependencies here"
-
-### 3. Download Pre-trained Model
-Visit our website at https://fastvision.ai/models to download the pre-trained model for lung cancer screening. Save the model file in the models directory.
-
-### 4. Train the Model
-TODO: Add instructions to train the model with custom datasets"
-
-### 5. Run the Web UI
-TODO: Add instructions to run the web-based user interface.
-
-### 6. Optimize Model with Chatbot
-TODO: # Add instructions for using the chatbot to optimize the model.
-
-## Contributing
-
-TODO
-
-## License
-
-TODO
-
-## Contact
-
-For any inquiries, please contact rmendiratta@ischool.berkeley.edu
 
 
 
